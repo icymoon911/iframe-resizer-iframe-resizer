@@ -1,6 +1,7 @@
 import { FOREGROUND, HIGHLIGHT } from 'auto-console-group'
 
 import { info } from '../console'
+import { registerDisconnect } from './utils'
 
 export default function visibilityObserver(callback) {
   const observer = new IntersectionObserver(
@@ -15,10 +16,10 @@ export default function visibilityObserver(callback) {
 
   info('Attached%c VisibilityObserver%c to page', HIGHLIGHT, FOREGROUND)
 
-  return {
-    disconnect: () => {
-      observer.disconnect()
-      info('Detached%c VisibilityObserver', HIGHLIGHT)
-    },
-  }
+  registerDisconnect(() => {
+    observer.disconnect()
+    info('Detached%c VisibilityObserver', HIGHLIGHT)
+  })
+
+  return observer
 }

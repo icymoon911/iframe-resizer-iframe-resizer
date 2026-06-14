@@ -3,18 +3,7 @@ import { HIGHLIGHT } from 'auto-console-group'
 import { HEIGHT_EDGE, OVERFLOW_ATTR } from '../../common/consts'
 import { id } from '../../common/utils'
 import { info } from '../console'
-import {
-  createDetachObservers,
-  createLogCounter,
-  createLogNewlyObserved,
-  createWarnAlreadyObserved,
-} from './utils'
-
-const OVERFLOW = 'Overflow'
-const logAddOverflow = createLogCounter(OVERFLOW)
-const logRemoveOverflow = createLogCounter(OVERFLOW, false)
-const logNewlyObserved = createLogNewlyObserved(OVERFLOW)
-const warnAlreadyObserved = createWarnAlreadyObserved(OVERFLOW)
+import { createNodeObserver, registerDisconnect } from './utils'
 
 const isHidden = (node) =>
   node.hidden || node.offsetParent === null || node.style.display === 'none'
@@ -50,46 +39,20 @@ const createOverflowObserver = (callback, options) => {
   }
 
   const observer = new IntersectionObserver(observation, observerOptions)
-  const observed = new WeakSet()
 
-  function attachObservers(nodeList) {
-    const alreadyObserved = new Set()
-    const newlyObserved = new Set()
-    let counter = 0
+  const nodeObserver = createNodeObserver({
+    type: 'Overflow',
+    observer,
+  })
 
-    for (const node of nodeList) {
-      if (node.nodeType !== Node.ELEMENT_NODE) continue
-      if (observed.has(node)) {
-        alreadyObserved.add(node)
-        continue
-      }
-
-      observer.observe(node)
-      observed.add(node)
-      newlyObserved.add(node)
-      counter += 1
-    }
-
-    warnAlreadyObserved(alreadyObserved)
-    logNewlyObserved(newlyObserved)
-    logAddOverflow(counter)
-
-    newlyObserved.clear()
-    alreadyObserved.clear()
-  }
+  registerDisconnect(() => {
+    observer.disconnect()
+    info('Detached%c OverflowObserver', HIGHLIGHT)
+  })
 
   return {
-    attachObservers,
-    detachObservers: createDetachObservers(
-      OVERFLOW,
-      observer,
-      observed,
-      logRemoveOverflow,
-    ),
-    disconnect: () => {
-      observer.disconnect()
-      info('Detached%c OverflowObserver', HIGHLIGHT)
-    },
+    attachObservers: nodeObserver.attach,
+    detachObservers: nodeObserver.detach,
   }
 }
 

@@ -1,13 +1,10 @@
 import { FOREGROUND, HIGHLIGHT } from 'auto-console-group'
 
 import { IGNORE_ATTR, IGNORE_TAGS, SIZE_ATTR } from '../../common/consts'
-import { round } from '../../common/utils'
-import { event, info, log } from '../console'
-import { metaCreateDebugObserved } from './utils'
+import { info, log } from '../console'
+import { createThrottledProcessor } from './throttle'
+import { createDebugLogger, registerDisconnect } from './utils'
 
-const DELAY = 16 // Corresponds to 60fps
-const DELAY_MARGIN = 2
-const DELAY_MAX = 200
 const MUTATION = 'Mutation'
 
 const addedNodes = new Set()
@@ -25,14 +22,9 @@ const config = {
   subtree: true,
 }
 
-let delayCount = 1
-let processMutations
-let pending = false
-let perfMon = 0
-
-const logAdded = metaCreateDebugObserved('added')(MUTATION)
-const logRemovedPage = metaCreateDebugObserved('removed (page)')(MUTATION)
-const logRemovedAdded = metaCreateDebugObserved('removed (added)')(MUTATION)
+const logAdded = createDebugLogger('added')(MUTATION)
+const logRemovedPage = createDebugLogger('removed (page)')(MUTATION)
+const logRemovedAdded = createDebugLogger('removed (added)')(MUTATION)
 
 const shouldSkip = (node) =>
   node.nodeType !== Node.ELEMENT_NODE ||
@@ -93,67 +85,41 @@ function logMutations() {
   }
 }
 
-const createProcessMutations = (callback) => () => {
-  const now = performance.now()
-  const delay = now - perfMon
-  const delayLimit = DELAY * delayCount++ + DELAY_MARGIN
-
-  // Back off if the callStack is busy with other stuff
-  if (delay > delayLimit && delay < DELAY_MAX) {
-    event('mutationThrottled')
-    info('Update delayed due to heavy workload on the callStack')
-    info(
-      `EventLoop busy time: %c${round(delay)}ms %c> Max wait: %c${delayLimit - DELAY_MARGIN}ms`,
-      HIGHLIGHT,
-      FOREGROUND,
-      HIGHLIGHT,
-    )
-    setTimeout(processMutations, DELAY * delayCount)
-    perfMon = now
-    return
-  }
-
-  delayCount = 1
-
-  newMutations.forEach(flatFilterMutations)
-  newMutations.length = 0
-  pending = false
-
-  logMutations()
-
-  callback({ addedNodes, removedNodes })
-
-  addedNodes.clear()
-  removedNodes.clear()
-}
-
-function mutationObserved(mutations) {
-  newMutations.push(mutations)
-  if (pending) return
-
-  perfMon = performance.now()
-  pending = true
-  requestAnimationFrame(processMutations)
-}
-
 export default function createMutationObserver(callback) {
   const observer = new window.MutationObserver(mutationObserved)
   const target = document.body || document.documentElement
 
-  processMutations = createProcessMutations(callback)
+  const processMutations = () => {
+    newMutations.forEach(flatFilterMutations)
+    newMutations.length = 0
+
+    logMutations()
+
+    callback({ addedNodes, removedNodes })
+
+    addedNodes.clear()
+    removedNodes.clear()
+  }
+
+  const throttled = createThrottledProcessor(processMutations)
+
+  function mutationObserved(mutations) {
+    newMutations.push(mutations)
+    throttled.schedule()
+  }
 
   observer.observe(target, config)
 
   info('Attached%c MutationObserver%c to body', HIGHLIGHT, FOREGROUND)
 
-  return {
-    ...observer,
-    disconnect: () => {
-      addedNodes.clear()
-      removedNodes.clear()
-      newMutations.length = 0
-      observer.disconnect()
-      info('Detached%c MutationObserver', HIGHLIGHT)
-    },
-  }
+  registerDisconnect(() => {
+    addedNodes.clear()
+    removedNodes.clear()
+    newMutations.length = 0
+    throttled.reset()
+    observer.disconnect()
+    info('Detached%c MutationObserver', HIGHLIGHT)
+  })
+
+  return observer
 }

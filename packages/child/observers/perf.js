@@ -2,6 +2,7 @@ import { FOREGROUND, HIGHLIGHT } from 'auto-console-group'
 
 import { round } from '../../common/utils'
 import { advise, event, info, log } from '../console'
+import { registerDisconnect } from './utils'
 
 const SECOND = 1000
 const PERF_CHECK_INTERVAL = 5 * SECOND
@@ -14,9 +15,6 @@ export const PREF_END = '--ifr-end'
 const PREF_MEASURE = '--ifr-measure'
 
 const timings = []
-// const usedTags = new WeakSet()
-
-// const addUsedTag = (el) => typeof el === OBJECT && usedTags.add(el)
 
 let detail = {}
 let oldAverage = 0
@@ -56,7 +54,6 @@ function startTimingCheck() {
       )
       log('Average time:', roundedAverage)
       log('Max time:', round(Math.max(...timings)))
-      // debug('Timings:', JSON.parse(JSON.stringify(timings.map(round))))
     }
 
     clearPerfMarks()
@@ -98,17 +95,14 @@ export default function createPerformanceObserver() {
   const observer = new PerformanceObserver(perfObserver)
   observer.observe({ entryTypes: ['mark'] })
 
-  // addUsedTag(document.documentElement)
-  // addUsedTag(document.body)
-
   startTimingCheck()
 
-  return {
-    disconnect: () => {
-      clearPerfMarks()
-      clearInterval(timingCheckId)
-      observer.disconnect()
-      info('Detached%c PerformanceObserver', HIGHLIGHT)
-    },
-  }
+  registerDisconnect(() => {
+    clearPerfMarks()
+    clearInterval(timingCheckId)
+    observer.disconnect()
+    info('Detached%c PerformanceObserver', HIGHLIGHT)
+  })
+
+  return observer
 }

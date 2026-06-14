@@ -107,6 +107,7 @@ import createPerformanceObserver, {
   PREF_START,
 } from './observers/perf'
 import createResizeObserver from './observers/resize'
+import { disconnectAll } from './observers/utils'
 import createVisibilityObserver from './observers/visibility'
 import { readFunction, readNumber, readString } from './read'
 
@@ -1030,8 +1031,6 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
     )
 
     overflowObserver.attachObservers(nodeList)
-
-    return overflowObserver
   }
 
   function resizeObserved(entries) {
@@ -1042,8 +1041,7 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
 
   function createResizeObservers(nodeList) {
     resizeObserver = createResizeObserver(resizeObserved)
-    resizeObserver.attachObserverToNonStaticElements(nodeList)
-    return resizeObserver
+    resizeObserver.attachObservers(nodeList)
   }
 
   function visibilityChange(isVisible) {
@@ -1072,7 +1070,7 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
     const elements = getCombinedElementLists(nodeList)
 
     overflowObserver.attachObservers(elements)
-    resizeObserver.attachObserverToNonStaticElements(elements)
+    resizeObserver.attachObservers(elements)
 
     endAutoGroup()
   }
@@ -1106,22 +1104,18 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
     sendSize(MUTATION_OBSERVER, 'Mutation Observed')
   }
 
-  function pushDisconnectsOnToTearDown(observers) {
-    tearDownList.push(...observers.map((observer) => observer.disconnect))
-  }
-
   function attachObservers() {
     const nodeList = getAllElements(document.documentElement)
 
-    const observers = [
-      createMutationObserver(mutationObserved),
-      createOverflowObservers(nodeList),
-      createPerformanceObserver(),
-      createResizeObservers(nodeList),
-      createVisibilityObserver(visibilityChange),
-    ]
+    // Observer registry — all observers register their disconnect handlers via registerDisconnect()
+    createMutationObserver(mutationObserved)
+    createOverflowObservers(nodeList)
+    createPerformanceObserver()
+    createResizeObservers(nodeList)
+    createVisibilityObserver(visibilityChange)
 
-    pushDisconnectsOnToTearDown(observers)
+    // Add disconnectAll to tearDownList so page hide triggers cleanup
+    tearDownList.push(disconnectAll)
   }
 
   function getMaxElement(side) {
