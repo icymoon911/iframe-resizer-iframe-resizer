@@ -138,6 +138,23 @@ declare module '@iframe-resizer/parent' {
       onResized?(data: IFrameResizedData): void
 
       /**
+       * Called each time the iframe size changes, with before/after dimensions and the direction of change.
+       * Direction is 'expanded' if the iframe grew, 'collapsed' if it shrank, or 'unchanged'.
+       */
+      onSizeChange?(data: IFrameSizeChangeData): void
+
+      /**
+       * Called after the iframe size has stabilised (no further resize events for sizeStableDelay ms).
+       */
+      onSizeStable?(data: IFrameSizeStableData): void
+
+      /**
+       * Debounce delay in milliseconds before onSizeStable is fired after the last resize event.
+       * Defaults to 200.
+       */
+      sizeStableDelay?: number | undefined
+
+      /**
        * Called before the page is repositioned after a request from the iFrame, due to either an in page link,
        * or a direct request from either parentIFrame.scrollTo() or parentIFrame.scrollToOffset().
        * If this callback function returns false, it will stop the library from repositioning the page, so that
@@ -160,6 +177,24 @@ declare module '@iframe-resizer/parent' {
       height: number
       width: number
       type: string
+    }
+
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    interface IFrameSizeChangeData {
+      iframe: IFrameComponent
+      oldHeight: number
+      newHeight: number
+      oldWidth: number
+      newWidth: number
+      direction: 'expanded' | 'collapsed' | 'unchanged'
+      type: string
+    }
+
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    interface IFrameSizeStableData {
+      iframe: IFrameComponent
+      height: number
+      width: number
     }
 
     // eslint-disable-next-line @typescript-eslint/naming-convention

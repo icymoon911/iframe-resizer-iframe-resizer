@@ -82,10 +82,62 @@ import settings from './values/settings'
 
 function iframeListener(event) {
   function resizeIframe() {
+    // Capture old dimensions before applying new size
+    const oldHeight = settings[iframeId]?.prevHeight ?? 0
+    const oldWidth = settings[iframeId]?.prevWidth ?? 0
+
     setSize(messageData)
     setPagePosition(iframeId)
 
     on('onResized', messageData)
+
+    // Fire onSizeChange callback with directional info
+    if (settings[iframeId]) {
+      const { height: newHeight, width: newWidth } = messageData
+      const heightChanged = oldHeight !== newHeight
+      const widthChanged = oldWidth !== newWidth
+
+      let direction = 'unchanged'
+      if (heightChanged || widthChanged) {
+        // If any dimension grew, it is expanded; if any shrank, collapsed.
+        // When both happen simultaneously, prefer 'expanded' if net area grew.
+        const heightDelta = newHeight - oldHeight
+        const widthDelta = newWidth - oldWidth
+        const netDelta = heightDelta + widthDelta
+        direction = netDelta > 0 ? 'expanded' : netDelta < 0 ? 'collapsed' : 'unchanged'
+      }
+
+      const sizeChangeData = {
+        iframe: messageData.iframe,
+        oldHeight,
+        newHeight,
+        oldWidth,
+        newWidth,
+        direction,
+        type: messageData.type,
+      }
+
+      on('onSizeChange', sizeChangeData)
+
+      // Persist for next comparison
+      settings[iframeId].prevHeight = newHeight
+      settings[iframeId].prevWidth = newWidth
+
+      // Debounce: fire onSizeStable after sizeStableDelay ms of no resize
+      if (settings[iframeId].sizeStableTimer) {
+        clearTimeout(settings[iframeId].sizeStableTimer)
+      }
+
+      const stableDelay = settings[iframeId].sizeStableDelay ?? 200
+      settings[iframeId].sizeStableTimer = setTimeout(() => {
+        settings[iframeId].sizeStableTimer = null
+        on('onSizeStable', {
+          iframe: messageData.iframe,
+          height: newHeight,
+          width: newWidth,
+        })
+      }, stableDelay)
+    }
   }
 
   function getPaddingEnds(compStyle) {

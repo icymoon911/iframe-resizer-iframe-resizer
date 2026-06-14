@@ -31,6 +31,19 @@ declare module '@iframe-resizer/child' {
       onBeforeResize?(newSize: number): number
 
       /**
+       * Called after the new size has been calculated and the message sent to the parent.
+       * Receives the final height, width and the trigger event type.
+       */
+      onAfterResize?(data: { height: number; width: number; type: string }): void
+
+      /**
+       * Minimum interval in milliseconds between resize messages being sent.
+       * Useful for throttling high-frequency DOM changes to prevent message storms.
+       * Defaults to 0 (no throttling, only requestAnimationFrame-level deduplication).
+       */
+      throttleInterval?: number | undefined
+
+      /**
        * Receive message posted from the parent page with the iframe.iframeResizer.sendMessage() method.
        */
       onMessage?(message: any): void

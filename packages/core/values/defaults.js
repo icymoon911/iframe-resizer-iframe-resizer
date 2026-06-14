@@ -45,4 +45,9 @@ export default Object.freeze({
   onReady: onReadyDeprecated,
   onResized() {},
   onScroll: () => true,
+  onSizeChange() {},
+  onSizeStable() {},
+  sizeStableDelay: 200,
+  prevHeight: 0,
+  prevWidth: 0,
 })

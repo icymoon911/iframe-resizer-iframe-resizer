@@ -186,6 +186,8 @@ function iframeResizerChild() {
   let win = window
 
   let onBeforeResize
+  let onAfterResize = null
+  let throttleInterval = 0
   let onMessage = () => {
     warn('onMessage function not defined')
   }
@@ -400,8 +402,10 @@ Parent page: ${version} - Child page: ${VERSION}.
       log(`Reading data from page:`, Object.keys(data))
 
       onBeforeResize = readFunction(data, 'onBeforeResize') ?? onBeforeResize
+      onAfterResize = readFunction(data, 'onAfterResize') ?? onAfterResize
       onMessage = readFunction(data, 'onMessage') ?? onMessage
       onReady = readFunction(data, 'onReady') ?? onReady
+      throttleInterval = readNumber(data, 'throttleInterval') ?? throttleInterval
 
       if (typeof data?.offset === NUMBER) {
         deprecateOption(OFFSET, OFFSET_SIZE)
@@ -1448,6 +1452,8 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
   const sendFailed = once(() => advise(getModeData(4)))
   let hiddenMessageShown = false
   let rafId
+  let lastSendTime = 0
+  let throttleTimerId = null
 
   const sendSize = errorBoundary(
     (triggerEvent, triggerEventDesc, customHeight, customWidth, msg) => {
@@ -1479,6 +1485,40 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
 
         default: {
           hiddenMessageShown = false
+          const now = performance.now()
+
+          // Throttle: if throttleInterval is set and not enough time has passed, defer
+          if (throttleInterval > 0 && now - lastSendTime < throttleInterval) {
+            // Clear any existing throttle timer to coalesce rapid calls
+            if (throttleTimerId) clearTimeout(throttleTimerId)
+            const remaining = throttleInterval - (now - lastSendTime)
+            throttleTimerId = setTimeout(() => {
+              throttleTimerId = null
+              lastSendTime = performance.now()
+              sendPending = true
+              totalTime = performance.now()
+              timerActive = true
+
+              if (!rafId)
+                rafId = requestAnimationFrame(() => {
+                  sendPending = false
+                  rafId = null
+                  consoleEvent('requestAnimationFrame')
+                  debug(`Reset sendPending: %c${triggerEvent}`, HIGHLIGHT)
+                })
+
+              sizeIframe(
+                triggerEvent,
+                triggerEventDesc,
+                customHeight,
+                customWidth,
+                msg,
+              )
+            }, remaining)
+            break
+          }
+
+          lastSendTime = now
           sendPending = true
           totalTime = performance.now()
           timerActive = true
@@ -1581,6 +1621,15 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
 
     setTargetOrigin()
     dispatchToParent()
+
+    // Fire onAfterResize callback if configured
+    if (typeof onAfterResize === FUNCTION) {
+      isolateUserCode(onAfterResize, {
+        height,
+        width,
+        type: triggerEvent,
+      })
+    }
   }
 
   const sendMessage = errorBoundary(
