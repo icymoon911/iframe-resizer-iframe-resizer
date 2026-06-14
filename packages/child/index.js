@@ -981,6 +981,17 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
   }
 
   let prevOverflowedNodeSet = new Set()
+
+  // Polyfill for Set comparison: returns true when two Sets differ in content.
+  // Avoids Set.prototype.symmetricDifference which is unsupported in Safari ≤16.
+  function setsDiffer(setA, setB) {
+    if (setA.size !== setB.size) return true
+    for (const item of setA) {
+      if (!setB.has(item)) return true
+    }
+    return false
+  }
+
   function checkOverflow() {
     const allOverflowedNodes = document.querySelectorAll(`[${OVERFLOW_ATTR}]`)
 
@@ -988,11 +999,13 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
 
     hasOverflow = overflowedNodeSet.size > 0
 
-    // Not supported in Safari 16 (or esLint!!!)
+    // Use native symmetricDifference when available (faster), fall back to
+    // manual comparison on Safari ≤16 and other environments that lack it.
     // eslint-disable-next-line no-use-extend-native/no-use-extend-native
-    if (typeof Set.prototype.symmetricDifference === FUNCTION)
-      hasOverflowUpdated =
-        overflowedNodeSet.symmetricDifference(prevOverflowedNodeSet).size > 0
+    hasOverflowUpdated =
+      typeof Set.prototype.symmetricDifference === FUNCTION
+        ? overflowedNodeSet.symmetricDifference(prevOverflowedNodeSet).size > 0
+        : setsDiffer(overflowedNodeSet, prevOverflowedNodeSet)
 
     prevOverflowedNodeSet = overflowedNodeSet
   }

@@ -3,7 +3,7 @@ import { FOREGROUND, HIGHLIGHT } from 'auto-console-group'
 import { IGNORE_ATTR, IGNORE_TAGS, SIZE_ATTR } from '../../common/consts'
 import { round } from '../../common/utils'
 import { event, info, log } from '../console'
-import { metaCreateDebugObserved } from './utils'
+import { isElementNode, metaCreateDebugObserved } from './utils'
 
 const DELAY = 16 // Corresponds to 60fps
 const DELAY_MARGIN = 2
@@ -35,7 +35,7 @@ const logRemovedPage = metaCreateDebugObserved('removed (page)')(MUTATION)
 const logRemovedAdded = metaCreateDebugObserved('removed (added)')(MUTATION)
 
 const shouldSkip = (node) =>
-  node.nodeType !== Node.ELEMENT_NODE ||
+  !isElementNode(node) ||
   IGNORE_TAGS.has(node.tagName.toLowerCase())
 
 function addedMutation(mutation) {

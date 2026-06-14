@@ -8,6 +8,7 @@ import {
   createLogCounter,
   createLogNewlyObserved,
   createWarnAlreadyObserved,
+  isElementNode,
 } from './utils'
 
 const OVERFLOW = 'Overflow'
@@ -16,8 +17,25 @@ const logRemoveOverflow = createLogCounter(OVERFLOW, false)
 const logNewlyObserved = createLogNewlyObserved(OVERFLOW)
 const warnAlreadyObserved = createWarnAlreadyObserved(OVERFLOW)
 
-const isHidden = (node) =>
-  node.hidden || node.offsetParent === null || node.style.display === 'none'
+export const isHidden = (node) => {
+  // The hidden attribute hides the element (UA stylesheet display:none).
+  // Checking explicitly for jsdom where getComputedStyle may not reflect it.
+  if (node.hidden) return true
+
+  // Inline style check — fast path, avoids getComputedStyle call.
+  if (node.style.display === 'none') return true
+
+  // offsetParent is null for display:none elements AND position:fixed/sticky
+  // elements (where null is expected and does NOT mean hidden).
+  // When offsetParent is null, use getComputedStyle to distinguish them.
+  if (node.offsetParent === null) {
+    const style = window.getComputedStyle(node)
+    if (style.position === 'fixed' || style.position === 'sticky') return false
+    return style.display === 'none'
+  }
+
+  return false
+}
 
 const createOverflowObserver = (callback, options) => {
   const side = options.side || HEIGHT_EDGE
@@ -58,7 +76,7 @@ const createOverflowObserver = (callback, options) => {
     let counter = 0
 
     for (const node of nodeList) {
-      if (node.nodeType !== Node.ELEMENT_NODE) continue
+      if (!isElementNode(node)) continue
       if (observed.has(node)) {
         alreadyObserved.add(node)
         continue

@@ -136,9 +136,97 @@ test.describe('iframe-resizer Vue example', () => {
     // Skipping for now as it requires additional setup
     await page.goto('/example/vue/index.html')
     await page.waitForLoadState('networkidle')
-    
+
     // Check that app element exists
     const app = page.locator('#app')
     await expect(app).toBeVisible()
+  })
+})
+
+test.describe('iframe-resizer overflow stability (Safari regression)', () => {
+  test('should maintain stable iframe height without overflow jitter', async ({ page }) => {
+    await page.goto('/example/html/index.html')
+    await page.waitForLoadState('networkidle')
+
+    const iframeElement = page.locator('iframe')
+    await page.waitForFunction(() => {
+      const iframeEl = document.querySelector('iframe')
+      return iframeEl && iframeEl.iFrameResizer !== undefined
+    }, { timeout: 10000 })
+
+    // Capture a series of height measurements — jitter manifests as
+    // the height oscillating between two or more values.
+    const heights = await page.evaluate(async () => {
+      const iframe = document.querySelector('iframe')
+      const samples = []
+      for (let i = 0; i < 10; i++) {
+        samples.push(iframe.offsetHeight)
+        await new Promise(r => setTimeout(r, 50))
+      }
+      return samples
+    })
+
+    // All measurements must be identical — no jitter allowed.
+    const unique = [...new Set(heights)]
+    expect(unique.length).toBe(1)
+    expect(unique[0]).toBeGreaterThan(0)
+  })
+
+  test('should not trigger redundant resize messages when overflow state is unchanged', async ({ page }) => {
+    await page.goto('/example/html/index.html')
+    await page.waitForLoadState('networkidle')
+
+    await page.waitForFunction(() => {
+      const iframeEl = document.querySelector('iframe')
+      return iframeEl && iframeEl.iFrameResizer !== undefined
+    }, { timeout: 10000 })
+
+    // Spy on postMessage inside the iframe to count resize messages.
+    const iframeHandle = await page.locator('iframe').elementHandle()
+    const frame = await iframeHandle.contentFrame()
+
+    const resizeCount = await frame.evaluate(async () => {
+      let count = 0
+      const origPost = window.parent.postMessage.bind(window.parent)
+      window.parent.postMessage = (...args) => {
+        if (typeof args[0] === 'string' && args[0].includes('resize')) count++
+        origPost(...args)
+      }
+      await new Promise(r => setTimeout(r, 500))
+      return count
+    })
+
+    // After initialisation settles, there should be very few (ideally zero)
+    // additional resize messages during a 500ms quiet period.
+    expect(resizeCount).toBeLessThanOrEqual(2)
+  })
+
+  test('should correctly handle overflow detection with fixed-position elements', async ({ page }) => {
+    await page.goto('/example/html/index.html')
+    await page.waitForLoadState('networkidle')
+
+    const iframe = page.frameLocator('iframe')
+    await expect(iframe.locator('body')).toBeVisible()
+
+    // Inject a fixed-position element inside the iframe and verify the
+    // iframe height remains stable (the fixed element must not be mis-
+    // identified as hidden, which would corrupt overflow calculations).
+    const iframeElement = page.locator('iframe')
+    const heightBefore = await iframeElement.evaluate(el => el.offsetHeight)
+
+    await iframe.locator('body').evaluate(body => {
+      const fixed = document.createElement('div')
+      fixed.style.cssText = 'position:fixed;bottom:0;left:0;right:0;height:50px;background:blue;z-index:9999;'
+      fixed.textContent = 'Fixed navbar'
+      body.append(fixed)
+    })
+
+    // Give the observer a moment to react.
+    await page.waitForTimeout(200)
+
+    const heightAfter = await iframeElement.evaluate(el => el.offsetHeight)
+    expect(heightAfter).toBeGreaterThan(0)
+    // Height should not swing wildly from a small fixed-position addition.
+    expect(Math.abs(heightAfter - heightBefore)).toBeLessThan(200)
   })
 })
