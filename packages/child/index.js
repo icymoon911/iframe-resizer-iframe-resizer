@@ -107,6 +107,7 @@ import createPerformanceObserver, {
   PREF_START,
 } from './observers/perf'
 import createResizeObserver from './observers/resize'
+import { observerRegistry } from './observers/utils'
 import createVisibilityObserver from './observers/visibility'
 import { readFunction, readNumber, readString } from './read'
 
@@ -1018,32 +1019,10 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
     sendSize(OVERFLOW_OBSERVER, 'Overflow updated')
   }
 
-  function createOverflowObservers(nodeList) {
-    const overflowObserverOptions = {
-      root: document.documentElement,
-      side: calculateHeight ? HEIGHT_EDGE : WIDTH_EDGE,
-    }
-
-    overflowObserver = createOverflowObserver(
-      overflowObserved,
-      overflowObserverOptions,
-    )
-
-    overflowObserver.attachObservers(nodeList)
-
-    return overflowObserver
-  }
-
   function resizeObserved(entries) {
     if (!Array.isArray(entries) || entries.length === 0) return
     const el = entries[0].target
     sendSize(RESIZE_OBSERVER, `Element resized <${getElementName(el)}>`)
-  }
-
-  function createResizeObservers(nodeList) {
-    resizeObserver = createResizeObserver(resizeObserved)
-    resizeObserver.attachObserverToNonStaticElements(nodeList)
-    return resizeObserver
   }
 
   function visibilityChange(isVisible) {
@@ -1071,8 +1050,8 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
 
     const elements = getCombinedElementLists(nodeList)
 
-    overflowObserver.attachObservers(elements)
-    resizeObserver.attachObserverToNonStaticElements(elements)
+    overflowObserver.attach(elements)
+    resizeObserver.attach(elements)
 
     endAutoGroup()
   }
@@ -1084,8 +1063,8 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
 
     const elements = getCombinedElementLists(nodeList)
 
-    overflowObserver.detachObservers(elements)
-    resizeObserver.detachObservers(elements)
+    overflowObserver.detach(elements)
+    resizeObserver.detach(elements)
 
     endAutoGroup()
   }
@@ -1106,22 +1085,33 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
     sendSize(MUTATION_OBSERVER, 'Mutation Observed')
   }
 
-  function pushDisconnectsOnToTearDown(observers) {
-    tearDownList.push(...observers.map((observer) => observer.disconnect))
-  }
-
   function attachObservers() {
     const nodeList = getAllElements(document.documentElement)
 
-    const observers = [
-      createMutationObserver(mutationObserved),
-      createOverflowObservers(nodeList),
-      createPerformanceObserver(),
-      createResizeObservers(nodeList),
-      createVisibilityObserver(visibilityChange),
-    ]
+    // Create observers with lifecycle management via createObserver factory
+    overflowObserver = createOverflowObserver(overflowObserved, {
+      root: document.documentElement,
+      side: calculateHeight ? HEIGHT_EDGE : WIDTH_EDGE,
+    })
+    overflowObserver.attach(nodeList)
 
-    pushDisconnectsOnToTearDown(observers)
+    resizeObserver = createResizeObserver(resizeObserved)
+    resizeObserver.attach(nodeList)
+
+    // Create standalone observers
+    const mutationObserver = createMutationObserver(mutationObserved)
+    const perfObserver = createPerformanceObserver()
+    const visObserver = createVisibilityObserver(visibilityChange)
+
+    // Register all disconnects in the unified registry
+    observerRegistry.register(mutationObserver.disconnect)
+    observerRegistry.register(overflowObserver.disconnect)
+    observerRegistry.register(perfObserver.disconnect)
+    observerRegistry.register(resizeObserver.disconnect)
+    observerRegistry.register(visObserver.disconnect)
+
+    // Integrate with page-hide teardown lifecycle
+    tearDownList.push(...observerRegistry)
   }
 
   function getMaxElement(side) {
