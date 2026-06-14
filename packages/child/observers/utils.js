@@ -3,6 +3,8 @@ import { HIGHLIGHT, NORMAL } from 'auto-console-group'
 import { NEW_LINE } from '../../common/consts'
 import { debug, error, info } from '../console'
 
+export const isElementNode = (node) => node.nodeType === Node.ELEMENT_NODE
+
 export const metaCreateDebugObserved =
   (text = '') =>
   (type) =>

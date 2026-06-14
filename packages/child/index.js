@@ -109,6 +109,7 @@ import createPerformanceObserver, {
 import createResizeObserver from './observers/resize'
 import createVisibilityObserver from './observers/visibility'
 import { readFunction, readNumber, readString } from './read'
+import { setsDiffer } from './sets-differ'
 
 function iframeResizerChild() {
   const customCalcMethods = {
@@ -988,11 +989,14 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
 
     hasOverflow = overflowedNodeSet.size > 0
 
-    // Not supported in Safari 16 (or esLint!!!)
-    // eslint-disable-next-line no-use-extend-native/no-use-extend-native
-    if (typeof Set.prototype.symmetricDifference === FUNCTION)
-      hasOverflowUpdated =
-        overflowedNodeSet.symmetricDifference(prevOverflowedNodeSet).size > 0
+    // Use native symmetricDifference when available (not in Safari <= 16),
+    // otherwise fall back to manual set comparison to avoid unnecessary
+    // resize messages on every overflow observer callback.
+    hasOverflowUpdated =
+      // eslint-disable-next-line no-use-extend-native/no-use-extend-native
+      typeof Set.prototype.symmetricDifference === FUNCTION
+        ? overflowedNodeSet.symmetricDifference(prevOverflowedNodeSet).size > 0
+        : setsDiffer(overflowedNodeSet, prevOverflowedNodeSet)
 
     prevOverflowedNodeSet = overflowedNodeSet
   }

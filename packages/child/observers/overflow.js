@@ -3,11 +3,13 @@ import { HIGHLIGHT } from 'auto-console-group'
 import { HEIGHT_EDGE, OVERFLOW_ATTR } from '../../common/consts'
 import { id } from '../../common/utils'
 import { info } from '../console'
+import { isNodeHidden } from './is-hidden'
 import {
   createDetachObservers,
   createLogCounter,
   createLogNewlyObserved,
   createWarnAlreadyObserved,
+  isElementNode,
 } from './utils'
 
 const OVERFLOW = 'Overflow'
@@ -15,9 +17,6 @@ const logAddOverflow = createLogCounter(OVERFLOW)
 const logRemoveOverflow = createLogCounter(OVERFLOW, false)
 const logNewlyObserved = createLogNewlyObserved(OVERFLOW)
 const warnAlreadyObserved = createWarnAlreadyObserved(OVERFLOW)
-
-const isHidden = (node) =>
-  node.hidden || node.offsetParent === null || node.style.display === 'none'
 
 const createOverflowObserver = (callback, options) => {
   const side = options.side || HEIGHT_EDGE
@@ -41,7 +40,7 @@ const createOverflowObserver = (callback, options) => {
       const { boundingClientRect, rootBounds, target } = entry
       if (!rootBounds) continue // guard
       const edge = boundingClientRect[side]
-      const hasOverflow = isOverflowed(edge, rootBounds) && !isHidden(target)
+      const hasOverflow = isOverflowed(edge, rootBounds) && !isNodeHidden(target)
 
       setOverflow(target, hasOverflow)
     }
@@ -58,7 +57,7 @@ const createOverflowObserver = (callback, options) => {
     let counter = 0
 
     for (const node of nodeList) {
-      if (node.nodeType !== Node.ELEMENT_NODE) continue
+      if (!isElementNode(node)) continue
       if (observed.has(node)) {
         alreadyObserved.add(node)
         continue
