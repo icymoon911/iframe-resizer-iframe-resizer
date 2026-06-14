@@ -179,6 +179,7 @@ function iframeResizerChild() {
   let timerActive
   let totalTime
   let tolerance = 0
+  let throttleInterval = 0
   let triggerLocked = false
   let version
   let width = 1
@@ -186,6 +187,7 @@ function iframeResizerChild() {
   let win = window
 
   let onBeforeResize
+  let onAfterResize
   let onMessage = () => {
     warn('onMessage function not defined')
   }
@@ -400,6 +402,7 @@ Parent page: ${version} - Child page: ${VERSION}.
       log(`Reading data from page:`, Object.keys(data))
 
       onBeforeResize = readFunction(data, 'onBeforeResize') ?? onBeforeResize
+      onAfterResize = readFunction(data, 'onAfterResize') ?? onAfterResize
       onMessage = readFunction(data, 'onMessage') ?? onMessage
       onReady = readFunction(data, 'onReady') ?? onReady
 
@@ -421,6 +424,7 @@ Parent page: ${version} - Child page: ${VERSION}.
       key2 = readString(data, getKey(0)) ?? key2
       ignoreSelector = readString(data, 'ignoreSelector') ?? ignoreSelector
       sizeSelector = readString(data, 'sizeSelector') ?? sizeSelector
+      throttleInterval = readNumber(data, 'throttleInterval') ?? throttleInterval
       targetOriginDefault =
         readString(data, 'targetOrigin') ?? targetOriginDefault
 
@@ -1424,6 +1428,14 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
       // eslint-disable-next-line no-fallthrough
       case SET_OFFSET_SIZE:
         dispatchMessage(height, width, triggerEvent, msg)
+
+        if (onAfterResize !== undefined) {
+          isolateUserCode(onAfterResize, {
+            height,
+            width,
+            trigger: triggerEvent,
+          })
+        }
         break
 
       // the following case needs {} to prevent a compile error
@@ -1448,6 +1460,8 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
   const sendFailed = once(() => advise(getModeData(4)))
   let hiddenMessageShown = false
   let rafId
+  let lastSendTime = 0
+  let throttleTimerId = null
 
   const sendSize = errorBoundary(
     (triggerEvent, triggerEventDesc, customHeight, customWidth, msg) => {
@@ -1461,6 +1475,10 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
           sendPending = false
           cancelAnimationFrame(rafId)
           rafId = null
+          if (throttleTimerId) {
+            clearTimeout(throttleTimerId)
+            throttleTimerId = null
+          }
           break
         }
 
@@ -1479,6 +1497,34 @@ This version of <i>iframe-resizer</> can auto detect the most suitable ${label} 
 
         default: {
           hiddenMessageShown = false
+
+          // Throttle: if throttleInterval is set and not enough time
+          // has elapsed since the last send, defer this call
+          if (throttleInterval > 0) {
+            const now = performance.now()
+            const elapsed = now - lastSendTime
+
+            if (elapsed < throttleInterval) {
+              if (throttleTimerId) clearTimeout(throttleTimerId)
+
+              throttleTimerId = setTimeout(() => {
+                throttleTimerId = null
+                lastSendTime = performance.now()
+                sizeIframe(
+                  triggerEvent,
+                  triggerEventDesc,
+                  customHeight,
+                  customWidth,
+                  msg,
+                )
+              }, throttleInterval - elapsed)
+
+              break
+            }
+
+            lastSendTime = now
+          }
+
           sendPending = true
           totalTime = performance.now()
           timerActive = true

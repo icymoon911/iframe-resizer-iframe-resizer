@@ -10,6 +10,15 @@
 
 declare module '@iframe-resizer/child' {
   namespace iframeResizer {
+    interface AfterResizeData {
+      /** The new height of the iframe (in px). */
+      height: number
+      /** The new width of the iframe (in px). */
+      width: number
+      /** The trigger event that caused the resize (e.g. 'mutationObserver', 'resizeObserver', 'init', etc). */
+      trigger: string
+    }
+
     // eslint-disable-next-line @typescript-eslint/naming-convention
     interface IFramePageOptions {
       /**
@@ -26,9 +35,24 @@ declare module '@iframe-resizer/child' {
       targetOrigin?: string | undefined
 
       /**
+       * Minimum interval (in ms) between outgoing resize messages.
+       * When set to a value > 0, high-frequency DOM changes will be
+       * throttled so that resize messages are sent at most once per
+       * interval. Default is 0 (no throttling, only rAF-level dedup).
+       */
+      throttleInterval?: number | undefined
+
+      /**
        * Called before new size is set. Return a number to modify the new size.
        */
       onBeforeResize?(newSize: number): number
+
+      /**
+       * Called after the new size has been calculated and the resize message
+       * has been sent to the parent page. Receives the final height/width
+       * values and the trigger source that caused the resize.
+       */
+      onAfterResize?(data: AfterResizeData): void
 
       /**
        * Receive message posted from the parent page with the iframe.iframeResizer.sendMessage() method.
@@ -157,6 +181,7 @@ declare module '@iframe-resizer/child' {
   global {
     interface Window {
       iFrameResizer: iframeResizer.IFramePageOptions
+      iframeResizer: iframeResizer.IFramePageOptions
       parentIFrame: iframeResizer.IFramePage
     }
   }

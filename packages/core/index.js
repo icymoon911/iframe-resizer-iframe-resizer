@@ -74,6 +74,7 @@ import {
   vInfo,
   warn,
 } from './console'
+import { computeDirection } from './size-change'
 import warnOnNoResponse from './timeout'
 import checkUniqueId from './unique'
 import defaults from './values/defaults'
@@ -81,9 +82,47 @@ import page from './values/page'
 import settings from './values/settings'
 
 function iframeListener(event) {
+  function fireOnSizeChange(messageData, oldHeight, oldWidth) {
+    const { height: newHeight, width: newWidth, iframe } = messageData
+    const direction = computeDirection(oldHeight, newHeight, oldWidth, newWidth)
+
+    on('onSizeChange', {
+      iframe,
+      oldHeight,
+      newHeight,
+      oldWidth,
+      newWidth,
+      direction,
+    })
+  }
+
+  function scheduleOnSizeStable(messageData) {
+    const stableDelay = settings[iframeId]?.sizeStableDelay ?? 200
+
+    if (settings[iframeId].sizeStableTimer) {
+      clearTimeout(settings[iframeId].sizeStableTimer)
+    }
+
+    settings[iframeId].sizeStableTimer = setTimeout(() => {
+      settings[iframeId].sizeStableTimer = null
+      on('onSizeStable', messageData)
+    }, stableDelay)
+  }
+
   function resizeIframe() {
+    const { id } = messageData
+    const prevHeight = settings[id]?.lastHeight ?? 0
+    const prevWidth = settings[id]?.lastWidth ?? 0
+
     setSize(messageData)
     setPagePosition(iframeId)
+
+    // Store current size for next comparison
+    settings[id].lastHeight = messageData.height
+    settings[id].lastWidth = messageData.width
+
+    fireOnSizeChange(messageData, prevHeight, prevWidth)
+    scheduleOnSizeStable(messageData)
 
     on('onResized', messageData)
   }

@@ -30,6 +30,7 @@ export default Object.freeze({
   sameDomain: false,
   scrolling: false,
   sizeHeight: true,
+  sizeStableDelay: 200,
   // sizeSelector: '',
   sizeWidth: false,
   tolerance: 0,
@@ -45,4 +46,6 @@ export default Object.freeze({
   onReady: onReadyDeprecated,
   onResized() {},
   onScroll: () => true,
+  onSizeChange() {},
+  onSizeStable() {},
 })
